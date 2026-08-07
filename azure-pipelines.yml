@@ -1,0 +1,147 @@
+trigger:
+  branches:
+    include:
+      - main
+
+pool:
+  vmImage: 'ubuntu-22.04'
+
+name: $(Build.BuildId)
+
+variables:
+  nodeVersion: '22.x'
+  distPath: 'dist/angular-devops/browser'
+
+  sonarServiceConnection: 'SonarCloud-ServiceConnection'
+  sonarOrganization: 'jhosepespinoza'
+  sonarProjectKey: 'jhosepespinoza_angular-devops'
+
+  dockerServiceConnection: 'DockerHub-ServiceConnection'
+  dockerRepository: 'jhosepespinoza/angular-devops'
+  dockerfilePath: '$(Build.SourcesDirectory)/devops/Dockerfile'
+  imageTag: '$(Build.BuildId)'
+
+stages:
+  - stage: CI
+    displayName: 'CI - Validate application'
+
+    jobs:
+      - job: Validate
+        displayName: 'Test, build and analyze'
+
+        steps:
+          - checkout: self
+            clean: true
+            fetchDepth: 0
+            displayName: 'Git: Clone source code'
+
+          - task: UseNode@1
+            displayName: 'Install Node.js'
+            inputs:
+              version: '$(nodeVersion)'
+
+          - script: npm ci
+            displayName: 'Install dependencies'
+
+          - task: SonarCloudPrepare@4
+            displayName: 'Prepare SonarCloud analysis'
+            inputs:
+              SonarQube: '$(sonarServiceConnection)'
+              organization: '$(sonarOrganization)'
+              scannerMode: 'cli'
+              configMode: 'manual'
+              cliProjectKey: '$(sonarProjectKey)'
+              cliProjectName: 'angular-devops'
+              cliSources: 'src'
+              extraProperties: |
+                sonar.exclusions=node_modules/**,dist/**,coverage/**
+                sonar.test.inclusions=**/*.spec.ts
+                sonar.javascript.lcov.reportPaths=coverage/angular-devops/lcov.info
+                sonar.sourceEncoding=UTF-8
+
+          - script: npm run lint
+            displayName: 'Lint'
+
+          - script: npm run test -- --configuration ci
+            displayName: 'Run tests with coverage'
+
+          - task: PublishTestResults@2
+            displayName: 'Publish test results'
+            condition: succeededOrFailed()
+            inputs:
+              testResultsFormat: 'JUnit'
+              testResultsFiles: 'TESTS-results.xml'
+              testRunTitle: 'Unit tests'
+
+          - task: PublishCodeCoverageResults@2
+            displayName: 'Publish code coverage'
+            condition: succeededOrFailed()
+            inputs:
+              summaryFileLocation: 'coverage/angular-devops/cobertura-coverage.xml'
+
+          - script: npm run build -- --configuration production
+            displayName: 'Build project'
+
+          - task: SonarCloudAnalyze@4
+            displayName: 'Run SonarCloud analysis'
+
+          - task: SonarCloudPublish@4
+            displayName: 'Publish Quality Gate result'
+            inputs:
+              pollingTimeoutSec: '300'
+
+          - task: PublishPipelineArtifact@1
+            displayName: 'Publish build artifact'
+            inputs:
+              targetPath: '$(distPath)'
+              artifact: 'angular-dist'
+
+  - stage: CD
+    displayName: 'CD - Publish Docker image'
+    dependsOn: CI
+    condition: succeeded()
+
+    jobs:
+      - job: PublishDocker
+        displayName: 'Build, verify and push image'
+
+        steps:
+          - checkout: self
+            clean: true
+            displayName: 'Git: Clone source code'
+
+          - task: Docker@2
+            displayName: 'Build image'
+            inputs:
+              command: 'build'
+              repository: '$(dockerRepository)'
+              Dockerfile: '$(dockerfilePath)'
+              buildContext: '$(Build.SourcesDirectory)'
+              tags: |
+                $(imageTag)
+                latest
+
+          - script: |
+              set -euo pipefail
+              docker run -d --name smoke -p 8080:8080 $(dockerRepository):$(imageTag)
+              for i in $(seq 1 15); do
+                if curl -fsS http://localhost:8080/health; then
+                  docker rm -f smoke
+                  exit 0
+                fi
+                sleep 2
+              done
+              docker logs smoke
+              docker rm -f smoke
+              exit 1
+            displayName: 'Smoke test image'
+
+          - task: Docker@2
+            displayName: 'Push image'
+            inputs:
+              command: 'push'
+              containerRegistry: '$(dockerServiceConnection)'
+              repository: '$(dockerRepository)'
+              tags: |
+                $(imageTag)
+                latest

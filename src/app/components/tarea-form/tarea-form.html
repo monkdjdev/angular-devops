@@ -1,0 +1,14 @@
+<form class="tarea-form" (ngSubmit)="guardar()">
+  <input
+    type="text"
+    name="titulo"
+    placeholder="Nueva tarea"
+    [ngModel]="titulo()"
+    (ngModelChange)="titulo.set($event)"
+  />
+  <button type="submit">Agregar</button>
+</form>
+
+@if (error()) {
+  <p class="error">{{ error() }}</p>
+}

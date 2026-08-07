@@ -1,0 +1,11 @@
+node_modules
+dist
+coverage
+.angular
+.git
+.gitignore
+.vscode
+*.log
+TESTS-results.xml
+azure-pipelines.yml
+README.md

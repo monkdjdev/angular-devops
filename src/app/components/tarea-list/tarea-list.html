@@ -1,0 +1,26 @@
+<app-tarea-form />
+
+@if (total() === 0) {
+  <p class="vacio">No hay tareas registradas.</p>
+} @else {
+  <ul class="lista">
+    @for (tarea of lista(); track tarea.id) {
+      <li [class.completada]="tarea.completada">
+        <label>
+          <input
+            type="checkbox"
+            [checked]="tarea.completada"
+            (change)="alternar(tarea.id)"
+          />
+          {{ tarea.titulo }}
+        </label>
+        <button type="button" (click)="eliminar(tarea.id)">Eliminar</button>
+      </li>
+    }
+  </ul>
+
+  <footer class="resumen">
+    <span>{{ pendientes() }} de {{ total() }} pendientes</span>
+    <button type="button" (click)="limpiar()">Limpiar completadas</button>
+  </footer>
+}
