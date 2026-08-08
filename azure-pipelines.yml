@@ -13,11 +13,11 @@ variables:
   distPath: 'dist/angular-devops/browser'
 
   sonarServiceConnection: 'SonarCloud-ServiceConnection'
-  sonarOrganization: 'jhosepespinoza'
-  sonarProjectKey: 'jhosepespinoza_angular-devops'
+  sonarOrganization: 'monkdjdev'
+  sonarProjectKey: 'monkdjdev_angular-devops'
 
   dockerServiceConnection: 'DockerHub-ServiceConnection'
-  dockerRepository: 'jhosepespinoza/angular-devops'
+  dockerRepository: 'monkdjdev/angular-devops'
   dockerfilePath: '$(Build.SourcesDirectory)/devops/Dockerfile'
   imageTag: '$(Build.BuildId)'
 
