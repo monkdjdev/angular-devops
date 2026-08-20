@@ -1,0 +1,78 @@
+trigger: none
+pr: none
+
+parameters:
+- name: rollbackTag
+  displayName: 'Build ID que se restaurará'
+  type: string
+  default: 'REEMPLAZAR'
+
+- name: confirmRollback
+  displayName: 'Confirmo el rollback'
+  type: boolean
+  default: false
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  dockerServiceConnection: 'DockerHub-ServiceConnection'
+  dockerRepository: 'monkdjdev/angular-devops'
+
+stages:
+- stage: Rollback
+  displayName: 'Rollback de imagen Docker'
+  condition: eq('${{ parameters.confirmRollback }}', true)
+
+  jobs:
+  - job: RestoreDockerImage
+    displayName: 'Restaurar versión anterior'
+
+    steps:
+    - checkout: none
+
+    - bash: |
+        set -euo pipefail
+
+        if [[ ! "$ROLLBACK_TAG" =~ ^[0-9]+$ ]]; then
+          echo "##vso[task.logissue type=error]Debes ingresar un Build ID numérico."
+          exit 1
+        fi
+
+        echo "Imagen que se restaurará:"
+        echo "$(dockerRepository):$ROLLBACK_TAG"
+      displayName: 'Validar Build ID'
+      env:
+        ROLLBACK_TAG: ${{ parameters.rollbackTag }}
+
+    - task: Docker@2
+      displayName: 'Iniciar sesión en Docker Hub'
+      inputs:
+        command: login
+        containerRegistry: '$(dockerServiceConnection)'
+
+    - bash: |
+        set -euo pipefail
+
+        SOURCE_IMAGE="$(dockerRepository):$ROLLBACK_TAG"
+        TARGET_IMAGE="$(dockerRepository):latest"
+
+        echo "Descargando $SOURCE_IMAGE"
+        docker pull "$SOURCE_IMAGE"
+
+        echo "Marcando $SOURCE_IMAGE como $TARGET_IMAGE"
+        docker tag "$SOURCE_IMAGE" "$TARGET_IMAGE"
+
+        echo "Publicando $TARGET_IMAGE"
+        docker push "$TARGET_IMAGE"
+      displayName: 'Restaurar imagen como latest'
+      env:
+        ROLLBACK_TAG: ${{ parameters.rollbackTag }}
+
+    - bash: |
+        echo "Rollback completado"
+        echo "Versión restaurada: $(dockerRepository):$ROLLBACK_TAG"
+        echo "La misma imagen ahora está publicada como: $(dockerRepository):latest"
+      displayName: 'Mostrar resultado'
+      env:
+        ROLLBACK_TAG: ${{ parameters.rollbackTag }}
